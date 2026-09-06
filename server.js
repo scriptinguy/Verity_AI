@@ -1,41 +1,58 @@
 const express = require('express');
-const fetch = require('node-fetch');
+const { GoogleGenAI } = require('@google/genai');
 
 const app = express();
 app.use(express.json());
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+// Initialize GoogleGenAI with environment variable
+const apiKey = process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.trim() : '';
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 app.post('/v1/chat', async (req, res) => {
-    if (!GEMINI_API_KEY) {
+    if (!apiKey) {
         return res.status(500).json({ error: "Server missing GEMINI_API_KEY environment variable." });
     }
 
-    const model = req.body.model || "gemini-1.5-flash";
-    
-    // IMPORTANT: Remove ?key= from the URL for AQ. keys
-    const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-
     try {
-        const response = await fetch(googleUrl, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'x-goog-api-key': GEMINI_API_KEY.trim() // Pass key exclusively in header
-            },
-            body: JSON.stringify({
-                systemInstruction: req.body.systemInstruction,
-                contents: req.body.contents,
-                generationConfig: req.body.generationConfig
-            })
+        const modelName = req.body.model || 'gemini-1.5-flash';
+        
+        // Extract system prompt and user history sent from Roblox
+        const systemInstruction = req.body.systemInstruction?.parts?.[0]?.text || '';
+        const contents = req.body.contents || [];
+
+        // Call Gemini using official SDK native handling
+        const response = await ai.models.generateContent({
+            model: modelName,
+            contents: contents,
+            config: {
+                systemInstruction: systemInstruction,
+                temperature: req.body.generationConfig?.temperature || 0.85,
+                maxOutputTokens: req.body.generationConfig?.maxOutputTokens || 180,
+            }
         });
 
-        const data = await response.json();
-        return res.status(response.status).json(data);
+        // Return standard response structure back to Roblox
+        return res.status(200).json({
+            candidates: [
+                {
+                    content: {
+                        parts: [{ text: response.text }]
+                    }
+                }
+            ]
+        });
+
     } catch (err) {
-        return res.status(500).json({ error: "Failed to connect to Google API", details: err.message });
+        console.error("Gemini API Error:", err);
+        return res.status(500).json({ 
+            error: "Failed to connect to Google API", 
+            details: err.message 
+        });
     }
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Proxy server running on port ${PORT}`));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Proxy server listening on port ${PORT}`));
