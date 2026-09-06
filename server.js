@@ -4,7 +4,6 @@ const fetch = require('node-fetch');
 const app = express();
 app.use(express.json());
 
-// Set your Gemini API key in Render's Environment Variables
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 app.post('/v1/chat', async (req, res) => {
@@ -13,12 +12,17 @@ app.post('/v1/chat', async (req, res) => {
     }
 
     const model = req.body.model || "gemini-1.5-flash";
-    const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+    
+    // IMPORTANT: Remove ?key= from the URL for AQ. keys
+    const googleUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
     try {
         const response = await fetch(googleUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-goog-api-key': GEMINI_API_KEY.trim() // Pass key exclusively in header
+            },
             body: JSON.stringify({
                 systemInstruction: req.body.systemInstruction,
                 contents: req.body.contents,
